@@ -70,14 +70,18 @@ colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
 ### Run
+0) Launch Carla with native DDS
+```
+./CarlaUE4.sh --ros2
+```
 1) Launch Docker: Start autoware_carla_leaderboard and mount the repo.
 ```
-rocker --nvidia --x11 --privileged --net=host --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp --volume <autoware_carla_leaderboard> --name aw_carla_leaderboard_0916 -- gitlab.lrz.de:5005/safety/autoware_carla_leaderboard
+rocker --nvidia --x11 --privileged --net=host --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp --volume <autoware_carla_leaderboard> --name aw_carla_leaderboard_0916 -- tumgeka/autoware_carla_leaderboard:0.9.16
 ```
 
 example for students
 ```
-rocker --nvidia --x11 --privileged --net=host --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp --volume /home/tofadmin/gemb/cyclone_localhost.xml -e CYCLONEDDS_URI=/home/tofadmin/gemb/cyclone_localhost.xml --volume /home/tofadmin/gemb/autoware_carla_leaderboard --name aw_carla_leaderboard_0916 -- gitlab.lrz.de:5005/safety/autoware_carla_leaderboard
+rocker --nvidia --x11 --privileged --net=host --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp --volume /home/tofadmin/gemb/cyclone_localhost.xml -e CYCLONEDDS_URI=/home/tofadmin/gemb/cyclone_localhost.xml --volume /home/tofadmin/gemb/autoware_carla_leaderboard --name aw_carla_leaderboard_0916 -- tumgeka/autoware_carla_leaderboard:0.9.16
 ```
 2) Open a second terminal for the C++ bridge.
 ```
