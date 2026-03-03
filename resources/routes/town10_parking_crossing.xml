@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<routes>
+	<route id="0" town="Town10HD">
+		<weathers>
+			<weather route_percentage="100" cloudiness="5.0" precipitation="0.0" precipitation_deposits="0.0" wetness="0.0" wind_intensity="10.0" sun_azimuth_angle="-1.0" sun_altitude_angle="15.0" fog_density="2.0"/>
+		</weathers>
+		<waypoints>
+			<position x="-103.10965728759766" y="-11.707795143127441" z="0"/>
+			<position x="-100.32437896728516" y="-36.026798248291016" z="0"/>
+			<position x="-69.59451293945312" y="-58.21915817260742" z="0"/>
+			<position x="-52.191646575927734" y="-36.88048553466797" z="0"/>
+			<position x="-52.30860137939453" y="-21.38092613220215" z="0"/>
+			<position x="-74.03417205810547" y="12.978273391723633" z="0"/>
+			<position x="-103.15449523925781" y="-7.7080464363098145" z="0"/>
+			<position x="-88.43925476074219" y="-52.42476272583008" z="0"/>
+			<position x="-9.337783813476562" y="-57.5915641784668" z="0"/>
+			<position x="65.31326293945312" y="-57.42365264892578" z="0"/>
+		</waypoints>
+        <scenarios>
+            <scenario name="ParkingCrossingPedestrian_0" type="ParkingCrossingPedestrian">
+                <trigger_point x="-52.240692138671875" y="-30.38067054748535" z="0.0" yaw="90.43231964111328"/>
+				<distance value="20" />
+				<direction value="right" />
+				<crossing_angle value="0" />
+            </scenario>
+        </scenarios>
+	</route>
+</routes>

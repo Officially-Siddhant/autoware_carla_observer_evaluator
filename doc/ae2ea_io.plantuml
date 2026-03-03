@@ -1,0 +1,78 @@
+@startuml io-diagramm
+title AutowareE2EAgent IO Diagram (Revised)
+
+participant User
+participant "CARLA" as CARLA 
+participant "AutowareE2EAgent" as APA 
+participant "AutowareCarlaCppBridge" as AWC
+participant "SensorBridge" as LB
+participant "Autoware Universe" as AW
+
+User -> USER: //Start Sim, AW and CPP Bridges//
+activate AWC
+activate LB
+activate AW
+activate CARLA
+User -> APA: //Start Scenario//
+activate APA
+APA -> CARLA: //Initiate Scenario//
+activate CARLA
+
+== 1. System Startup ==
+note over APA, CARLA
+This loop establishes the initial link between Carla and the bridge. 
+This loop is executed five times at the beginning.
+end note
+loop **Trigger Five Times**
+    CARLA -> APA: //SimData//
+    CARLA -> AWC: /carla/clock
+    AWC -> AW: /clock
+    AWC -> APA: //AW Timestamp//
+    AWC -> LB: //AW Timestamp//
+    CARLA -> LB: //Sensordata//
+    LB -> AW: //sensor_data//
+    LB -> AWC: //sensor_data//
+    APA -> CARLA: //Control + Trigger Next Frame (initial trigger)//
+end loop
+
+== 2. Autoware Initialization & Synchronization Loop ==
+note over AWC, AW
+    This loop repeats until Autoware has successfully localized and
+    is ready to send control commands.
+end note
+loop **until Autoware_initialized and control received**
+    ' --- AWC Heartbeat / Clock Update (Always Running) ---
+    AWC -> AWC: //Every 100ms//
+    AWC -> AW: /clock
+    AWC -> LB: //AW Timestamp//
+    LB -> AW: //sensor_data//
+    AWC -> AW: //Sensordata, Goalpose, Engage,...//
+    note over LB
+        Repeats last sensor data with updated timestamp
+    end note
+end loop
+    AW -> AWC: //control_cmd// ' Sent when initialized
+    AWC -> LB: //Exit Sync Loop//
+
+
+== 3. Runtime Control Loop ==
+' --- System is initialized; now runs frame-by-frame control ---
+AWC -> APA: //control_cmd//
+APA -> CARLA: //Control + Trigger Next Frame//
+CARLA -> APA: //SimData//
+CARLA -> AWC: /carla/clock
+CARLA -> LB: //Sensordata//
+AWC -> AW: /clock
+AWC -> APA: //AW Timestamp//
+AWC -> LB: //AW Timestamp//
+LB -> AW: //sensor_data//
+APA -> AW: //Sensordata, Goalpose, Engage,...//
+AW -> AWC: //control_cmd//
+AWC -> APA: //control_cmd//
+APA -> CARLA: //Control + Trigger Next Frame (initial trigger)//
+deactivate AW
+deactivate LB
+deactivate AWC
+deactivate CARLA
+deactivate APA
+@enduml

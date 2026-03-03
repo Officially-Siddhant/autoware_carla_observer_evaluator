@@ -1,0 +1,10 @@
+repositories:
+  scenario_runner:
+    type: git
+    url: https://carlaverse:glpat-Xiz51KY1ThfS15uH0hNz_G86MQp1OjFxbHgK.01.100rk7ksg@gitlab.lrz.de/carlaverse-3d/scenario-runner
+    version: stibbe/ma_leaderboard-2.0
+
+  leaderboard:
+    type: git
+    url: https://safety_master5:glpat-cZW2oNqWmYt2JS9QeMmmgG86MQp1OjFxbHcK.01.101gi84vj@gitlab.lrz.de/safety/leaderboard
+    version: new_aw_agent

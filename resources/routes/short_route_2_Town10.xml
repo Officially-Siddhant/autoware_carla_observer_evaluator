@@ -1,0 +1,89 @@
+<?xml version="1.0" ?>
+<routes>
+    <route id="0" town="Town10HD_Opt">
+        <waypoints>
+            <position x="-103.06" y="-16.47" z="0.0"/>
+            <position x="-103.03" y="-18.56" z="0.0"/>
+            <position x="-103.01" y="-20.72" z="0.0"/>
+            <position x="-102.97" y="-22.99" z="0.0"/>
+            <position x="-102.83" y="-25.16" z="0.0"/>
+            <position x="-102.6" y="-27.17" z="0.0"/>
+            <position x="-102.18" y="-29.61" z="0.0"/>
+            <position x="-101.68" y="-31.81" z="0.0"/>
+            <position x="-101.07" y="-33.9" z="0.0"/>
+            <position x="-100.22" y="-36.29" z="0.0"/>
+            <position x="-99.41" y="-38.23" z="0.0"/>
+            <position x="-98.55" y="-40.03" z="0.0"/>
+            <position x="-97.4" y="-42.13" z="0.0"/>
+            <position x="-96.0" y="-44.34" z="0.0"/>
+            <position x="-94.76" y="-46.07" z="0.0"/>
+            <position x="-93.49" y="-47.66" z="0.0"/>
+            <position x="-92.19" y="-49.11" z="0.0"/>
+            <position x="-90.44" y="-50.8" z="0.0"/>
+            <position x="-88.8" y="-52.15" z="0.0"/>
+            <position x="-86.93" y="-53.47" z="0.0"/>
+            <position x="-85.0" y="-54.62" z="0.0"/>
+            <position x="-83.0" y="-55.62" z="0.0"/>
+            <position x="-80.58" y="-56.58" z="0.0"/>
+            <position x="-78.38" y="-57.26" z="0.0"/>
+            <position x="-76.29" y="-57.73" z="0.0"/>
+            <position x="-73.88" y="-58.08" z="0.0"/>
+            <position x="-71.6" y="-58.22" z="0.0"/>
+            <position x="-69.16" y="-58.21" z="0.0"/>
+            <position x="-66.95" y="-58.19" z="0.0"/>
+            <position x="-64.43" y="-58.17" z="0.0"/>
+            <position x="-62.03" y="-58.0" z="0.0"/>
+            <position x="-59.98" y="-57.49" z="0.0"/>
+            <position x="-57.85" y="-56.56" z="0.0"/>
+            <position x="-55.83" y="-55.17" z="0.0"/>
+            <position x="-54.4" y="-53.72" z="0.0"/>
+            <position x="-53.08" y="-51.61" z="0.0"/>
+            <position x="-52.33" y="-49.37" z="0.0"/>
+            <position x="-52.11" y="-47.3" z="0.0"/>
+            <position x="-52.13" y="-45.02" z="0.0"/>
+            <position x="-52.15" y="-42.73" z="0.0"/>
+            <position x="-52.17" y="-40.35" z="0.0"/>
+            <position x="-52.18" y="-38.0" z="0.0"/>
+            <position x="-52.2" y="-35.59" z="0.0"/>
+            <position x="-52.22" y="-33.06" z="0.0"/>
+            <position x="-52.24" y="-30.1" z="0.0"/>
+            <position x="-52.26" y="-27.82" z="0.0"/>
+            <position x="-52.28" y="-25.63" z="0.0"/>
+            <position x="-52.3" y="-22.88" z="0.0"/>
+            <position x="-52.32" y="-20.31" z="0.0"/>
+            <position x="-52.34" y="-17.85" z="0.0"/>
+            <position x="-52.35" y="-15.46" z="0.0"/>
+            <position x="-52.35" y="-13.41" z="0.0"/>
+            <position x="-52.34" y="-10.42" z="0.0"/>
+            <position x="-52.33" y="-7.88" z="0.0"/>
+            <position x="-52.32" y="-5.81" z="0.0"/>
+            <position x="-52.32" y="-3.29" z="0.0"/>
+            <position x="-52.31" y="-0.22" z="0.0"/>
+            <position x="-52.34" y="1.95" z="0.0"/>
+            <position x="-52.29" y="4.56" z="0.0"/>
+            <position x="-52.29" y="7.47" z="0.0"/>
+            <position x="-52.28" y="10.36" z="0.0"/>
+            <position x="-52.27" y="13.3" z="0.0"/>
+            <position x="-52.47" y="16.54" z="0.0"/>
+            <position x="-52.25" y="20.04" z="0.0"/>
+            <position x="-52.24" y="23.56" z="0.0"/>
+            <position x="-52.23" y="27.17" z="0.0"/>
+            <position x="-52.22" y="30.53" z="0.0"/>
+            <position x="-52.21" y="33.77" z="0.0"/>
+            <position x="-52.35" y="36.67" z="0.0"/>
+            <position x="-52.2" y="39.36" z="0.0"/>
+            <position x="-52.19" y="41.67" z="0.0"/>
+            <position x="-52.18" y="44.56" z="0.0"/>
+            <position x="-52.18" y="46.61" z="0.0"/>
+            <position x="-52.17" y="48.64" z="0.0"/>
+        </waypoints>
+        <scenarios>
+            <scenario name="DynamicObjectCrossing_1" type="DynamicObjectCrossing">
+                <trigger_point x="71.6" y="-58.22" z="0.0" yaw="103.5"/>
+                <distance value="40"/>
+                <blocker_model value="static.prop.advertisement"/>
+                <crossing_angle value="10"/>
+            </scenario>
+        </scenarios>
+    </route>
+</routes>

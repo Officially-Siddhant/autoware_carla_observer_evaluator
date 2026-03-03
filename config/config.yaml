@@ -1,0 +1,40 @@
+evaluation:
+  agent_setup:
+    # Path to Agent's .py file to evaluate
+    agent: src/autoware_agent/aw_e2e.py
+    # This is for the priviliged
+    #agent: src/autoware_agent/aw_priviliged.py
+    #agent-config: /carla/config/config.yaml
+  challenge:
+    # Participation track: SENSORS, MAP
+    track: MAP
+    # Resume execution from last checkpoint?
+    resume: false
+    # Path to checkpoint used for saving statistics and resuming
+    checkpoint: ./simulation_results.json
+    # Path to checkpoint used for saving live results
+    debug-checkpoint: ./live_results.txt
+  general_parameters:
+    # IP of the host server (default: localhost)
+    host: localhost
+    # TCP port to listen to (default: 2000)
+    port: 2000
+    # Port to use for the TrafficManager (default: 8000)
+    traffic-manager-port: 8000
+    # Seed used by the TrafficManager (default: 0)
+    traffic-manager-seed: 0
+    # Run with debug output (default: 0)
+    debug: 1
+    # Use CARLA recording feature to create a recording of the scenario
+    record: ""
+    # Set the CARLA client timeout value in seconds (default: 300.0)
+    timeout: 300.0
+    # Run with visualization (default: 0)
+    tmp_visu: 0
+  simulation_setup:
+    # Name of the routes file to be executed
+    routes: resources/routes/town10_parking_crossing.xml
+    # Execute a specific set of routes (default: "")
+    routes-subset: ""
+    # Number of repetitions per route (default: 1)
+    repetitions: 1

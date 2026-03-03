@@ -1,0 +1,22 @@
+repositories:
+    # autoware
+    autoware_msgs:
+      type: git
+      url: https://github.com/autowarefoundation/autoware_msgs.git
+      version: 1.4.0
+    tier4_autoware_msgs:
+      type: git
+      url: https://github.com/tier4/tier4_autoware_msgs.git
+      version: v0.41.0
+    autoware_adapi_msgs:
+      type: git
+      url: https://github.com/autowarefoundation/autoware_adapi_msgs.git
+      version: e62ea6fdb9ee50e49c7642c77e85250cb15b8e80
+    core/autoware_internal_msgs:
+      type: git
+      url: https://github.com/autowarefoundation/autoware_internal_msgs.git
+      version: 1.8.0
+    carla_ros_bridge:
+      type: git
+      url: https://carlaverse:glpat-Xiz51KY1ThfS15uH0hNz_G86MQp1OjFxbHgK.01.100rk7ksg@gitlab.lrz.de/carlaverse-3d/carla-autoware-simulation/ros-bridge.git
+      version: leaderboard_modifications
