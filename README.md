@@ -70,7 +70,8 @@ colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
 ### Run
-0) Launch Carla with native DDS
+0) Download CARLA here: [TODO](LINK)
+and Launch Carla with native DDS
 ```
 ./CarlaUE4.sh --ros2
 ```
