@@ -11,8 +11,10 @@ def generate_launch_description():
             parameters=[{
                 'nodes_to_wait_for': ['AutowareE2EAgent', 'lidar_bridge_1', 
                                       'lidar_bridge_2', 'camera_bridge_1']
-            }]
+            }],
+            arguments=['--ros-args', '--log-level', 'debug']
         ),
+
         # Launch lidar_bridge_node instances
         Node(
             package='autoware_carla_cpp_bridge',

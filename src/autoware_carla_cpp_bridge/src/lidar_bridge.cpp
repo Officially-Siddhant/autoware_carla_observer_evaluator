@@ -30,6 +30,11 @@ LidarBridge::LidarBridge(
     diagnostic_qos
   );
 
+  sync_timer_ = this->create_wall_timer(
+    std::chrono::milliseconds(200),
+    std::bind(&LidarBridge::syncTimerCallback, this)
+  );
+
   // Subscriber
   lidar_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     input_topic,
@@ -42,6 +47,13 @@ LidarBridge::LidarBridge(
     10,
     std::bind(&LidarBridge::clockCallback, this, std::placeholders::_1)
   );
+
+  sync_state_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+    "/awcarla/sync_state",
+    10,
+    std::bind(&LidarBridge::syncStateCallback, this, std::placeholders::_1)
+  );
+
 }
 
 void LidarBridge::clockCallback(const rosgraph_msgs::msg::Clock::SharedPtr msg)
@@ -51,7 +63,8 @@ void LidarBridge::clockCallback(const rosgraph_msgs::msg::Clock::SharedPtr msg)
 
 void LidarBridge::lidarCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
-  auto modified_msg = *msg;
+  sensor_msgs::msg::PointCloud2 modified_msg;
+  modified_msg.header = msg->header;
   modified_msg.header.frame_id = frame_id_;
   modified_msg.header.stamp = aw_time_;
 
@@ -130,10 +143,51 @@ void LidarBridge::lidarCallback(const sensor_msgs::msg::PointCloud2::SharedPtr m
 
     lidar_pub_->publish(modified_msg);
 
+    if (sync_state_){
+      last_lidar_msg_ = modified_msg;
+      last_lidar_msg_received = true;
+    }
+
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
     status.name = this->get_name();
     ready_state_pub_->publish(status);
+}
+
+void LidarBridge::setSyncState()
+{
+
+  RCLCPP_INFO(this->get_logger(), "Setting lidar sync state to true.");
+  sync_state_ = true;
+  
+}
+
+void LidarBridge::unsetSyncState()
+{
+  RCLCPP_INFO(this->get_logger(), "Setting lidar sync state to false.");
+  sync_state_ = false;
+  last_lidar_msg_received = false;
+}
+
+void LidarBridge::syncStateCallback(const std_msgs::msg::Bool::SharedPtr msg)
+{
+    if (msg->data) {
+        this->setSyncState();
+    } else {
+        this->unsetSyncState();
+    }
+}
+
+void LidarBridge::syncTimerCallback()
+{
+  if (!sync_state_) {
+    return;
+  }
+
+  if (last_lidar_msg_received) {
+    last_lidar_msg_.header.stamp = aw_time_;
+    lidar_pub_->publish(last_lidar_msg_);
+  }
 }
 
 

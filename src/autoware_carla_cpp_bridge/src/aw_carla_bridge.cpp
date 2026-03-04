@@ -17,6 +17,7 @@ AWCarlaCPPBridge::AWCarlaCPPBridge(const rclcpp::NodeOptions & options)
 
   last_carla_clock_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
   last_autoware_clock_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
+  last_sync_clock_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
 
   // Sync Stuff
   this->declare_parameter<std::vector<std::string>>(
@@ -27,6 +28,49 @@ AWCarlaCPPBridge::AWCarlaCPPBridge(const rclcpp::NodeOptions & options)
                                           nodes_to_wait_for_.end());
   RCLCPP_INFO(this->get_logger(), "CPP Bridge waiting for %ld nodes", 
   expected_nodes_.size());
+
+  sync_timer_ = this->create_wall_timer(
+    std::chrono::milliseconds(100),
+    std::bind(&AWCarlaCPPBridge::syncTimerCallback, this)
+  );
+
+  gnss_pose_pub_= 
+  this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/sensing/gnss/pose_with_covariance", 10);
+  imu_pub_= 
+  this->create_publisher<sensor_msgs::msg::Imu>("/sensing/imu/imu_data", 10);
+  control_mode_pub_= 
+  this->create_publisher<autoware_vehicle_msgs::msg::ControlModeReport>("/vehicle/status/control_mode", 10);
+  steering_status_pub_= 
+  this->create_publisher<autoware_vehicle_msgs::msg::SteeringReport>("/vehicle/status/steering_status", 10);
+  velocity_status_pub_= 
+  this->create_publisher<autoware_vehicle_msgs::msg::VelocityReport>("/vehicle/status/velocity_status", 10);
+  engage_pub_= 
+  this->create_publisher<autoware_vehicle_msgs::msg::Engage>("/autoware/engage", 10);
+  rclcpp::QoS trans_qos(rclcpp::KeepLast(1));
+  trans_qos.transient_local();
+  sync_state_pub_= 
+  this->create_publisher<std_msgs::msg::Bool>("/awcarla/sync_state", trans_qos);
+
+  gnss_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+    "/sensing/gnss/pose_with_covariance", 10,
+    [this](const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg) { last_gnss_pose_ = msg; });
+  imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+    "/sensing/imu/imu_data", 10,
+    [this](const sensor_msgs::msg::Imu::SharedPtr msg) { last_imu_data_ = msg; });
+  control_mode_sub_ = this->create_subscription<autoware_vehicle_msgs::msg::ControlModeReport>(
+    "/vehicle/status/control_mode", 10,
+    [this](const autoware_vehicle_msgs::msg::ControlModeReport::SharedPtr msg) { last_control_mode_ = msg; });
+  steering_status_sub_ = this->create_subscription<autoware_vehicle_msgs::msg::SteeringReport>(
+    "/vehicle/status/steering_status", 10,
+    [this](const autoware_vehicle_msgs::msg::SteeringReport::SharedPtr msg) { last_steering_status_ = msg; });
+  velocity_status_sub_ = this->create_subscription<autoware_vehicle_msgs::msg::VelocityReport>(
+    "/vehicle/status/velocity_status", 10,
+    [this](const autoware_vehicle_msgs::msg::VelocityReport::SharedPtr msg) { last_velocity_status_ = msg; });
+  aw_ctrl_sub_ = this->create_subscription<autoware_control_msgs::msg::Control>(
+    "/control/trajectory_follower/control_cmd", 10,
+    std::bind(&AWCarlaCPPBridge::ctrlCallback, this, std::placeholders::_1));
+
+
 
   // Publisher
   aw_time_pub_ = this->create_publisher<rosgraph_msgs::msg::Clock>("/autoware_time", 10);
@@ -41,7 +85,7 @@ AWCarlaCPPBridge::AWCarlaCPPBridge(const rclcpp::NodeOptions & options)
 
   ready_state_sub_ = this->create_subscription<diagnostic_msgs::msg::DiagnosticStatus>(
     "/ready_state", 10,
-    std::bind(&AWCarlaCPPBridge::ready_callback, this, std::placeholders::_1));
+    std::bind(&AWCarlaCPPBridge::readyCallback, this, std::placeholders::_1));
 
 }
 
@@ -57,6 +101,7 @@ void AWCarlaCPPBridge::clockCallback(const rosgraph_msgs::msg::Clock::SharedPtr 
 
     // Set a static diff of one second
     diff = rclcpp::Duration(1, 0);
+    setSyncState();
   }
   else {
     diff = current_carla_time - last_carla_clock_;
@@ -73,7 +118,7 @@ void AWCarlaCPPBridge::clockCallback(const rosgraph_msgs::msg::Clock::SharedPtr 
   last_carla_clock_ = current_carla_time;
 }
 
-void AWCarlaCPPBridge::ready_callback(const diagnostic_msgs::msg::DiagnosticStatus::SharedPtr msg)
+void AWCarlaCPPBridge::readyCallback(const diagnostic_msgs::msg::DiagnosticStatus::SharedPtr msg)
 {
   if (msg->level != diagnostic_msgs::msg::DiagnosticStatus::OK)
   {
@@ -103,5 +148,61 @@ void AWCarlaCPPBridge::ready_callback(const diagnostic_msgs::msg::DiagnosticStat
   }
 
 }
+
+void AWCarlaCPPBridge::setSyncState()
+{
+
+  RCLCPP_INFO(this->get_logger(), "Setting sync state to true.");
+  sync_state_ = true;
+  std_msgs::msg::Bool sync_msg;
+  sync_msg.data = sync_state_;
+  sync_state_pub_->publish(sync_msg);
+}
+
+void AWCarlaCPPBridge::unsetSyncState()
+{
+  RCLCPP_INFO(this->get_logger(), "Setting sync state to false.");
+  sync_state_ = false;
+  std_msgs::msg::Bool sync_msg;
+  sync_msg.data = sync_state_;
+  sync_state_pub_->publish(sync_msg);
+}
+
+void AWCarlaCPPBridge::syncTimerCallback()
+{
+  if (!sync_state_) {
+    return;
+  }
+
+  // Will get now new clock since sim will not be ticked while sync mode
+  // TODO: Do we need last_sync_clock at all?
+  if (last_sync_clock_ == last_autoware_clock_){
+    rclcpp::Duration diff(0,50000000); // 50ms
+    last_autoware_clock_ = last_autoware_clock_ + diff;
+  }
+  last_sync_clock_ = last_autoware_clock_;
+  rosgraph_msgs::msg::Clock clock_msg;
+  clock_msg.clock = last_autoware_clock_;
+  clock_pub_->publish(clock_msg);
+  // TODO: With the new sync we could basically use only clock_pub at /clock topic
+  aw_time_pub_->publish(clock_msg);
+
+  // Publish last messages with updated timestamps
+  updateAndPublishWithHeader<geometry_msgs::msg::PoseWithCovarianceStamped>(last_gnss_pose_, gnss_pose_pub_);
+  updateAndPublishWithHeader<sensor_msgs::msg::Imu>(last_imu_data_, imu_pub_);
+  updateAndPublishWithStamp<autoware_vehicle_msgs::msg::ControlModeReport>(last_control_mode_, control_mode_pub_);
+  updateAndPublishWithStamp<autoware_vehicle_msgs::msg::SteeringReport>(last_steering_status_, steering_status_pub_);
+  updateAndPublishWithHeader<autoware_vehicle_msgs::msg::VelocityReport>(last_velocity_status_, velocity_status_pub_);
+  autoware_vehicle_msgs::msg::Engage engage_msg;
+  engage_msg.engage = true;
+  engage_pub_->publish(engage_msg);
+}
+
+void AWCarlaCPPBridge::ctrlCallback(const autoware_control_msgs::msg::Control::SharedPtr msg)
+{
+  unsetSyncState();
+}
+
+
 
 }  // namespace autoware_carla_cpp_bridge

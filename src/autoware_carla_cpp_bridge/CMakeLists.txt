@@ -11,6 +11,9 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(autoware_vehicle_msgs REQUIRED)
+find_package(autoware_control_msgs REQUIRED)
 
 add_executable(aw_carla_bridge_node
   src/aw_carla_bridge_node.cpp
@@ -23,6 +26,10 @@ ament_target_dependencies(aw_carla_bridge_node
   rclcpp
   std_msgs
   diagnostic_msgs
+  geometry_msgs
+  sensor_msgs
+  autoware_vehicle_msgs
+  autoware_control_msgs
 )
 
 install(TARGETS aw_carla_bridge_node
@@ -39,6 +46,7 @@ ament_target_dependencies(lidar_bridge_node
   rclcpp
   sensor_msgs
   diagnostic_msgs
+  std_msgs
 )
 
 install(TARGETS lidar_bridge_node
