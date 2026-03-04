@@ -16,7 +16,3 @@ repositories:
       type: git
       url: https://github.com/autowarefoundation/autoware_internal_msgs.git
       version: 1.8.0
-    carla_ros_bridge:
-      type: git
-      url: https://carlaverse:glpat-Xiz51KY1ThfS15uH0hNz_G86MQp1OjFxbHgK.01.100rk7ksg@gitlab.lrz.de/carlaverse-3d/carla-autoware-simulation/ros-bridge.git
-      version: leaderboard_modifications
