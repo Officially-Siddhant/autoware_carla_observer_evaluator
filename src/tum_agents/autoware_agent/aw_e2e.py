@@ -490,7 +490,9 @@ class AutowareE2EAgent(TUMROSBaseAgent):
 
         # Since we are tracking our own autoware time we need to overwrite the actual carla time
         carla_timestamp = self._aw_time.sec + self._aw_time.nanosec * 1e-9
-        if abs(control_timestamp - carla_timestamp) > EPSILON:
+        # Allow a slightly larger epsilon here to account for some potential jitter in the callback execution
+        # Happends rarely but makes the sim stutter.
+        if abs(control_timestamp - carla_timestamp) > 0.051:  
             print(
                 "\033[93mWARNING2222: Expecting a vehicle command with timestamp {} but the timestamp received was {} .\033[0m".format(carla_timestamp, control_timestamp),
                 "\033[93mThis vehicle command will be ignored.\033[0m",
