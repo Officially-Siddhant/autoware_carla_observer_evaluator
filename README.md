@@ -37,6 +37,10 @@ If you use this or the other associated repos, please cite our preprint:
 ```
 
 ### Youtube Demo Video + Quickstart
+| Demo                                            | Quickstart                                         |
+| ----------------------------------------------------- | ---------------------------------------------- |
+| [![DEMO](https://img.youtube.com/vi/0cwbvZAWZuw/0.jpg)](https://youtu.be/0cwbvZAWZuw)                                       | [![Quickstart](https://img.youtube.com/vi/_P4Ctp4JUhg/0.jpg)](https://youtu.be/_P4Ctp4JUhg)                             |
+
 
 ## DEV-Workflow
 For simplicity, we use Rocker, which streamlines Docker commands.
@@ -72,7 +76,7 @@ colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
 ### Run
-0) Download CARLA here: [TODO](LINK)
+0) Download CARLA here: [CARLA_0916](https://autoware-files.s3.us-west-2.amazonaws.com/carla/CARLA_294096eb1-dirty.tar.gz)
 and Launch Carla with native DDS
 ```
 ./CarlaUE4.sh --ros2
@@ -124,10 +128,10 @@ The current recommended Autoware Version is: **1.7.1**
 > 2) Clone the 1.7.1 autoware repo
 > 3) vcs import all autoware.repos
 > 4) Clone the audi etron vehicle model: https://github.com/TUMFTM/carla_audi_etron
-> 4) Mount the repos into the autoware docker and build everything 
+> 5) Mount the repos into the autoware docker and build everything 
 
 You can find Town01, Town07 and Town10 here:
-[TODO](Link)
+[Map_Assets](https://github.com/TUMFTM/autoware_carla_leaderboard/releases/tag/v1.0.0-maps)
 
 
 ### Optional
