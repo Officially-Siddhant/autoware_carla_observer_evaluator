@@ -5,10 +5,10 @@ This document describes how to set up Autoware Universe 1.7.1 with the
 `autoware_carla_leaderboard` bridge for scenario-based testing with CARLA 0.9.16.
 
 **Assumptions:**
-- CARLA is running with native DDS enabled (see [CARLA Native DDS Setup](carla_native_dds_setup.md) guide)
+- CARLA is running with native DDS enabled (see CARLA Native DDS Setup guide)
 - Docker is installed on the host
 - `rocker` is installed on the host
-- Host machine: `/home/skodas/`
+- On vedant@Minerva: base path is `/data/vedant/Ubuntu/Swaraj/`
 
 ---
 
@@ -21,6 +21,13 @@ pip install rocker
 rocker --version
 ```
 
+If you see `Docker permission error`, add your user to the docker group:
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker   # applies immediately without logout
+```
+
 ---
 
 ## Part 1: autoware_carla_leaderboard Bridge Setup (One-Time)
@@ -28,7 +35,7 @@ rocker --version
 ### Step 1: Clone the repository
 
 ```bash
-cd ~
+cd /data/vedant/Ubuntu/Swaraj
 git clone https://github.com/TUMFTM/autoware_carla_leaderboard.git
 ```
 
@@ -43,17 +50,24 @@ docker pull tumgeka/autoware_carla_leaderboard:0.9.16
 ```bash
 rocker --nvidia --x11 --privileged --net=host \
     --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
-    --volume ~/autoware_carla_leaderboard \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard \
     --name aw_carla_leaderboard_0916 \
     -- tumgeka/autoware_carla_leaderboard:0.9.16
 ```
 
 ### Step 4: Import repos and build (inside the container)
 
-Once inside the container shell:
+If the `src/external` directory was copied via `scp` rather than cloned, fix git
+ownership first:
 
 ```bash
-cd /home/skodas/autoware_carla_leaderboard
+git config --global --add safe.directory '*'
+```
+
+Then import and build:
+
+```bash
+cd /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard
 mkdir -p src/external \
     && vcs import --recursive src/external < docker/carla.repos \
     && vcs import --recursive src/external < docker/ros2.repos
@@ -61,66 +75,82 @@ mkdir -p src/external \
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
-This build takes approximately 1-2 minutes. Two warnings are expected and harmless:
-- `tier4_auto_msgs_converter`: header install destination deprecation notice
-- `autoware_carla_cpp_bridge`: unused parameter warning in C++
+The build is complete when you see `34 packages finished`. Two stderr warnings
+are expected and harmless: `tier4_auto_msgs_converter` and `autoware_carla_cpp_bridge`.
 
-The build is complete when you see `34 packages finished`.
+### Step 5: Install the CARLA wheel (one-time per container build)
 
-### Step 5: Install the source-built CARLA wheel (one-time per container build)
+**Critical:** The bridge container ships with a generic CARLA Python package
+incompatible with your CARLA binary. This causes `client.get_world()` to crash
+with `std::bad_alloc`. Replace it with the wheel from your CARLA installation.
 
-**Critical:** The bridge container ships with a generic CARLA 0.9.16 Python package
-that is incompatible with your source-built CARLA server. This causes `client.get_world()`
-to crash with `std::bad_alloc`. You must replace it with your source-built wheel.
-
-First, copy the wheel to the mounted directory on the **host**:
+Copy the wheel from `carla_non_source`:
 
 ```bash
-cp /home/skodas/carla/PythonAPI/carla/dist/carla-0.9.16-cp310-cp310-linux_x86_64.whl \
-    /home/skodas/autoware_carla_leaderboard/
+cp /data/vedant/Ubuntu/Swaraj/carla_non_source/PythonAPI/carla/dist/carla-0.9.16-cp310-cp310-linux_x86_64.whl \
+    /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard/
 ```
 
-Then inside the **bridge container**:
+Then inside the bridge container:
 
 ```bash
 pip3 install \
-    /home/skodas/autoware_carla_leaderboard/carla-0.9.16-cp310-cp310-linux_x86_64.whl \
+    /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard/carla-0.9.16-cp310-cp310-linux_x86_64.whl \
     --force-reinstall
 ```
 
-**Important:** This must be repeated every time the container restarts since the
-container is ephemeral and resets to its original image on restart.
+**This must be repeated every time the container restarts.**
+
+Verify connectivity:
+
+```bash
+python3 -c "
+import carla
+client = carla.Client('localhost', 2000)
+client.set_timeout(10.0)
+print('Server:', client.get_server_version())
+world = client.get_world()
+print('Map:', world.get_map().name)
+"
+```
 
 ### Step 6: Patch the leaderboard evaluator to skip redundant map reloads
 
 The leaderboard evaluator always calls `client.load_world()` even if the correct
-map is already loaded. This causes a 5000ms timeout crash when CARLA already has
-the target map loaded. Patch it on the host:
+map is already loaded. This causes a 5000ms timeout crash. Apply this patch once:
 
 ```bash
 sed -i 's/        self.world = self.client.load_world(town, reset_settings=False)/        current_map = self.client.get_world().get_map().name.split("\/")[-1]\n        if current_map == town:\n            print(f"Map {town} already loaded, skipping reload.")\n            self.world = self.client.get_world()\n        else:\n            self.world = self.client.load_world(town, reset_settings=False)/' \
-    /home/skodas/autoware_carla_leaderboard/src/external/leaderboard/leaderboard/leaderboard_evaluator.py
+    /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard/src/external/leaderboard/leaderboard/leaderboard_evaluator.py
 ```
 
-Verify the patch:
+Verify the patch was applied correctly:
 
 ```bash
 sed -n '240,255p' \
-    /home/skodas/autoware_carla_leaderboard/src/external/leaderboard/leaderboard/leaderboard_evaluator.py
+    /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard/src/external/leaderboard/leaderboard/leaderboard_evaluator.py
 ```
+
+You should see the `current_map == town` check before the `load_world` call.
+
+**Why this patch is necessary:** Without it, the evaluator reloads the map every
+run even when CARLA already has the correct map loaded. This triggers shader
+recompilation and causes a 5-second timeout crash on slower hardware.
 
 ### Step 7: Configure the scenario
 
-Edit `config/config.yaml` to set your agent and route. Use Town10HD_Opt routes
-since that is what CARLA loads by default — switching maps causes GPU crashes:
+Edit `config/config.yaml`:
 
 ```yaml
 evaluation:
   agent_setup:
-    agent: src/autoware_agent/aw_e2e.py   # E2E mode
-    # agent: src/autoware_agent/aw_priviliged.py  # Privileged mode
+    agent: src/autoware_agent/aw_e2e.py
   general_parameters:
-    debug: 0    # Keep at 0 to minimize disk writes
+    host: localhost
+    port: 2000
+    traffic-manager-port: 8001   # Use 8001 to avoid bind errors from previous runs
+    debug: 0
+    timeout: 300.0
   simulation_setup:
     routes: resources/routes/short_route_2_Town10.xml
 ```
@@ -129,12 +159,13 @@ evaluation:
 
 | Route file | Town | Notes |
 |---|---|---|
-| `short_route_2_Town10.xml` | Town10HD_Opt | Default CARLA map, no switching needed |
-| `town10_parking_crossing.xml` | Town10HD_Opt | Default CARLA map, no switching needed |
-| `town01_parking_pedestrian_crossing_short.xml` | Town01 | Requires map switch, may crash GPU |
+| `short_route_2_Town10.xml` | Town10HD_Opt | Default CARLA map, recommended |
+| `town10_parking_crossing.xml` | Town10HD_Opt | Default CARLA map |
+| `town01_parking_pedestrian_crossing_short.xml` | Town01 | Requires map switch |
 
-**Always use Town10HD_Opt routes** to avoid the GPU renderer crash that occurs
-when CARLA switches maps dynamically.
+**Note on traffic-manager-port:** Always use `8001` instead of the default `8000`
+to avoid `RuntimeError: bind error` from Traffic Manager ports left open by
+previous runs that didn't clean up properly.
 
 ---
 
@@ -146,129 +177,49 @@ when CARLA switches maps dynamically.
 docker pull ghcr.io/autowarefoundation/autoware:universe-devel-cuda-1.7.1
 ```
 
-### Step 2: Clone the Autoware 1.7.1 repository
+### Step 2: Transfer the Autoware workspace
+
+If setting up on a new machine, transfer from an existing setup:
 
 ```bash
-cd ~
-git clone https://github.com/autowarefoundation/autoware.git
-cd autoware
-git checkout 1.7.1
+scp -r ~/autoware vedant@10.20.110.48:/data/vedant/Ubuntu/Swaraj/
+scp -r ~/autoware_maps vedant@10.20.110.48:/data/vedant/Ubuntu/Swaraj/
+scp -r ~/autoware_data vedant@10.20.110.48:/data/vedant/Ubuntu/Swaraj/
 ```
 
-### Step 3: Import all Autoware repos
+**Important:** The maps directory is `autoware_maps` (with an 's'). Always verify:
 
 ```bash
-cd ~/autoware
-mkdir -p src
-vcs import src < repositories/autoware.repos
+ls /data/vedant/Ubuntu/Swaraj/autoware_maps/carla/Town10/
+# Must show: lanelet2_map.osm  map_projector_info.yaml  pointcloud_map.pcd
 ```
 
-This clones approximately 30 repositories pinned to specific versions. The
-`detached HEAD` messages are expected and normal.
-
-### Step 4: Fix acados submodules
-
-The `acados` package requires submodules that are not cloned by default:
-
-```bash
-cd ~/autoware/src/universe/external/acados
-git submodule update --init --recursive
-cd ~/autoware
-```
-
-### Step 5: Clone the Carla Audi e-tron vehicle model
+### Step 3: Clone the Carla Audi e-tron vehicle model (if not transferred)
 
 ```bash
 git clone https://github.com/TUMFTM/carla_audi_etron.git \
-    ~/autoware/src/carla_audi_etron
+    /data/vedant/Ubuntu/Swaraj/autoware/src/carla_audi_etron
 ```
 
-This provides the `carla_audi_etron_vehicle` and `carla_audi_etron_sensor_kit`
-that Autoware needs when launching with CARLA.
-
-### Step 6: Download map assets (one-time)
-
-Download the CARLA Lanelet2 maps for Town01, Town07, and Town10:
-
-```bash
-mkdir -p ~/autoware_map/carla
-# Download from: https://github.com/TUMFTM/autoware_carla_leaderboard/releases/tag/v1.0.0-maps
-# Extract into ~/autoware_map/carla/ so the structure is:
-# ~/autoware_map/carla/Town01/lanelet2_map.osm
-# ~/autoware_map/carla/Town01/pointcloud_map.pcd
-# ~/autoware_map/carla/Town01/map_projector_info.yaml
-# ~/autoware_map/carla/Town10/...
-```
-
-### Step 7: Download Autoware ML model artifacts (one-time)
-
-Autoware requires ML model files for perception. Run this script once:
-
-```bash
-cat > ~/download_autoware_data.sh << 'EOF'
-#!/bin/bash
-DATA_DIR=~/autoware_data
-BASE_URL=https://awf.ml.dev.web.auto/perception/models
-
-mkdir -p $DATA_DIR/lidar_centerpoint
-mkdir -p $DATA_DIR/tensorrt_yolox
-mkdir -p $DATA_DIR/traffic_light_classifier
-mkdir -p $DATA_DIR/traffic_light_fine_detector
-
-# lidar_centerpoint
-wget -P $DATA_DIR/lidar_centerpoint $BASE_URL/centerpoint/v3/centerpoint_tiny_ml_package.param.yaml
-wget -P $DATA_DIR/lidar_centerpoint $BASE_URL/centerpoint/v3/pts_voxel_encoder_centerpoint_tiny.onnx
-wget -P $DATA_DIR/lidar_centerpoint $BASE_URL/centerpoint/v3/pts_backbone_neck_head_centerpoint_tiny.onnx
-wget -P $DATA_DIR/lidar_centerpoint $BASE_URL/centerpoint/v3/centerpoint_ml_package.param.yaml
-wget -P $DATA_DIR/lidar_centerpoint $BASE_URL/centerpoint/v3/detection_class_remapper.param.yaml
-wget -P $DATA_DIR/lidar_centerpoint $BASE_URL/centerpoint/v3/deploy_metadata.yaml
-
-# tensorrt_yolox
-wget -P $DATA_DIR/tensorrt_yolox $BASE_URL/tl_detector_yolox_s/v1/yolox_s_car_ped_tl_detector_960_960_batch_1.onnx
-wget -P $DATA_DIR/tensorrt_yolox $BASE_URL/tl_detector_yolox_s/v1/car_ped_tl_detector_labels.txt
-
-# traffic_light_classifier
-wget -P $DATA_DIR/traffic_light_classifier $BASE_URL/traffic_light_classifier/v4/traffic_light_classifier_mobilenetv2_batch_6.onnx
-wget -P $DATA_DIR/traffic_light_classifier $BASE_URL/traffic_light_classifier/v4/ped_traffic_light_classifier_mobilenetv2_batch_6.onnx
-wget -P $DATA_DIR/traffic_light_classifier $BASE_URL/traffic_light_classifier/v4/lamp_labels.txt
-wget -P $DATA_DIR/traffic_light_classifier $BASE_URL/traffic_light_classifier/v4/lamp_labels_ped.txt
-
-# traffic_light_fine_detector
-wget -P $DATA_DIR/traffic_light_fine_detector $BASE_URL/tlr_yolox_s/v3/tlr_car_ped_yolox_s_batch_6.onnx
-wget -P $DATA_DIR/traffic_light_fine_detector $BASE_URL/tlr_yolox_s/v3/tlr_labels.txt
-
-echo "Done. autoware_data downloaded to $DATA_DIR"
-EOF
-chmod +x ~/download_autoware_data.sh
-~/download_autoware_data.sh
-```
-
-### Step 8: Launch the Autoware container and build
-
-Launch the container with all required volumes mounted:
+### Step 4: Launch the Autoware container and build
 
 ```bash
 rocker --nvidia --x11 --privileged --net=host \
     --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
-    --volume ~/autoware \
-    --volume ~/autoware_map \
-    --volume ~/autoware_data \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware_maps \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware_data \
     --name autoware_1_7_1 \
     -- ghcr.io/autowarefoundation/autoware:universe-devel-cuda-1.7.1
 ```
 
-Inside the container, install the missing RViz dependency first:
+Inside the container:
 
 ```bash
 apt-get update
 apt-get install -y ros-humble-rviz-2d-overlay-plugins
-```
 
-Then build the workspace, skipping packages that consistently fail due to missing
-GPU dependencies or external model files:
-
-```bash
-cd /home/skodas/autoware
+cd /data/vedant/Ubuntu/Swaraj/autoware
 rm -rf build/autoware_string_stamped_rviz_plugin build/autoware_overlay_rviz_plugin
 
 MAKEFLAGS="-j4" colcon build --symlink-install \
@@ -286,61 +237,39 @@ MAKEFLAGS="-j4" colcon build --symlink-install \
     trt_batched_nms
 ```
 
-**Note:** Use `-j4` and `--parallel-workers 4` to limit memory usage. If the build
-crashes with `Killed signal terminated program cc1plus`, reduce to `-j2 --parallel-workers 2`.
-
-**Known build issues and fixes:**
-
-| Issue | Fix |
-|---|---|
-| `acados` missing `blasfeo`/`hpipm` | Run `git submodule update --init --recursive` in `src/universe/external/acados/` on the host, then skip acados in the build |
-| `autoware_string_stamped_rviz_plugin` missing header | Run `apt-get install -y ros-humble-rviz-2d-overlay-plugins` inside container, delete `build/autoware_string_stamped_rviz_plugin/` and rebuild |
-| `g++: fatal error: Killed signal` | Out of memory — reduce parallel workers |
-| `ros-humble-rviz-2d-overlay-plugins not found` via apt | Use `apt-get update` first, then install |
-
-### Step 9: Create the autoware_data symlink (every container restart)
-
-The Autoware launch files expect model files at `/root/autoware_data/` but the
-volume is mounted at `/home/skodas/autoware_data/`. Create a symlink:
+### Step 5: Create the autoware_data symlink (every container restart)
 
 ```bash
-ln -s /home/skodas/autoware_data /root/autoware_data 2>/dev/null || true
+ln -s /data/vedant/Ubuntu/Swaraj/autoware_data /root/autoware_data 2>/dev/null || true
 ```
-
-**This must be done every time the Autoware container is restarted.**
 
 ---
 
 ## Part 3: Running the Full Stack
 
-Once all one-time setup is complete, this is the complete launch sequence every time.
-
 ### Terminal Layout
 
-Use 5 terminals:
 - **Terminal 1**: CARLA (host)
 - **Terminal 2**: Bridge container — C++ bridge
 - **Terminal 3**: Bridge container — leaderboard evaluator
 - **Terminal 4**: Autoware container — Autoware launch
-- **Terminal 5**: Host — monitoring and fixes
+- **Terminal 5**: Host — monitoring
 
-### Terminal 1: Launch CARLA with native DDS
+### Terminal 1: Launch CARLA
 
 ```bash
-cd /home/skodas/carla
-make launch-dds
-# Press Play in the CARLA editor once it opens
-# CARLA loads Town10HD_Opt by default — do NOT switch maps
+cd /data/vedant/Ubuntu/Swaraj/carla_non_source
+./CarlaUE4.sh --ros2
 ```
 
-### Terminal 2: Start the bridge container and C++ bridge
+CARLA loads Town10HD_Opt by default. Do not switch maps unless your route requires it.
 
-If the container is not already running:
+### Terminal 2: Start the bridge
 
 ```bash
 rocker --nvidia --x11 --privileged --net=host \
     --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
-    --volume ~/autoware_carla_leaderboard \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard \
     --name aw_carla_leaderboard_0916 \
     -- tumgeka/autoware_carla_leaderboard:0.9.16
 ```
@@ -348,109 +277,64 @@ rocker --nvidia --x11 --privileged --net=host \
 Inside the container — run these every restart:
 
 ```bash
-cd /home/skodas/autoware_carla_leaderboard
+cd /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard
 source install/setup.bash
 source carla_envs.sh
-
-# CRITICAL: Reinstall source-built wheel every container restart
 pip3 install carla-0.9.16-cp310-cp310-linux_x86_64.whl --force-reinstall
-
 ros2 launch autoware_carla_cpp_bridge aw_carla_cpp_bridge.launch.py
 ```
-
-The bridge will print `[DEBUG] Calling timer` every 100ms while waiting for CARLA.
-Once CARLA Play is pressed, ROS2 topics will start appearing.
 
 ### Terminal 3: Open a second shell in the bridge container
 
 ```bash
 docker exec -it aw_carla_leaderboard_0916 bash
-cd /home/skodas/autoware_carla_leaderboard
+cd /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard
 source install/setup.bash
 source carla_envs.sh
-
-# CRITICAL: Reinstall source-built wheel every container restart
 pip3 install carla-0.9.16-cp310-cp310-linux_x86_64.whl --force-reinstall
 ```
 
-Verify the bridge is working:
-
-```bash
-ros2 topic list
-```
-
-You should see topics including `/carla/clock`, `/carla/ego_vehicle/sensor/camera/image`,
-`/sensing/gnss/pose_with_covariance`, `/sensing/imu/imu_data`, etc.
-
-Verify CARLA connectivity:
-
-```bash
-python3 -c "
-import carla
-client = carla.Client('localhost', 2000)
-client.set_timeout(10.0)
-print('Server:', client.get_server_version())
-print('Client:', client.get_client_version())
-world = client.get_world()
-print('Map:', world.get_map().name)
-"
-```
-
-Both versions should report `0.9.16` and `get_world()` must succeed without crashing.
-
-### Terminal 4: Launch the Autoware container and Autoware
-
-If the container is not already running:
+### Terminal 4: Launch Autoware
 
 ```bash
 rocker --nvidia --x11 --privileged --net=host \
     --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
-    --volume ~/autoware \
-    --volume ~/autoware_map \
-    --volume ~/autoware_data \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware_maps \
+    --volume /data/vedant/Ubuntu/Swaraj/autoware_data \
     --name autoware_1_7_1 \
     -- ghcr.io/autowarefoundation/autoware:universe-devel-cuda-1.7.1
 ```
 
-Inside the container — run these every restart:
+Inside the container:
 
 ```bash
-# Create autoware_data symlink (required every restart)
-ln -s /home/skodas/autoware_data /root/autoware_data 2>/dev/null || true
+ln -s /data/vedant/Ubuntu/Swaraj/autoware_data /root/autoware_data 2>/dev/null || true
+source /data/vedant/Ubuntu/Swaraj/autoware/install/setup.bash
 
-# Source the workspace
-source /home/skodas/autoware/install/setup.bash
-```
-
-Launch Autoware with Town10 map (matches Town10HD_Opt in CARLA):
-
-```bash
+# For Town10 routes:
 ros2 launch autoware_launch e2e_simulator.launch.xml \
     vehicle_model:=carla_audi_etron_vehicle \
     sensor_model:=carla_audi_etron_sensor_kit \
-    map_path:=/home/skodas/autoware_map/carla/Town10
+    map_path:=/data/vedant/Ubuntu/Swaraj/autoware_maps/carla/Town10
+
+# For Town01 routes:
+ros2 launch autoware_launch e2e_simulator.launch.xml \
+    vehicle_model:=carla_audi_etron_vehicle \
+    sensor_model:=carla_audi_etron_sensor_kit \
+    map_path:=/data/vedant/Ubuntu/Swaraj/autoware_maps/carla/Town01
 ```
-
-**RViz notes:**
-- Initial Fixed Frame error "Frame [map] does not exist" is expected — set Fixed Frame
-  to `base_link` temporarily
-- Once localization initializes, switch back to `map`
-- Add PointCloud2 displays for `/sensing/lidar/front/pointcloud` and
-  `/sensing/lidar/rear/pointcloud` to visualize LiDAR data
-
-Wait for Autoware to fully initialize (50+ nodes visible via `ros2 node list | wc -l`)
-before running the evaluator.
 
 ### Terminal 3: Run the leaderboard evaluator
 
-Only after Autoware is fully launched:
+Only after Autoware is fully launched (50+ nodes via `ros2 node list | wc -l`):
 
 ```bash
 python3 src/external/leaderboard/leaderboard/leaderboard_evaluator.py \
     --conf_file_path=config/config.yaml
 ```
 
-Expected output on first successful run:
+Expected output on successful run:
 ```
 ========= Preparing RouteScenario_0 (repetition 0) =========
 > Loading the world
@@ -462,118 +346,215 @@ Map Town10HD_Opt already loaded, skipping reload.
 
 ---
 
+## Part 4: Between-Run Cleanup
+
+**Always clean up between runs** to prevent stale LiDAR data from causing NDT
+localization failures on the next run.
+
+### Step 1: Destroy all CARLA actors (Terminal 3)
+
+Run this after the evaluator finishes and before starting the next run:
+
+```bash
+python3 -c "
+import carla
+client = carla.Client('localhost', 2000)
+client.set_timeout(10.0)
+world = client.get_world()
+actors = world.get_actors()
+count = 0
+for actor in actors:
+    if actor.type_id != 'spectator':
+        actor.destroy()
+        count += 1
+print(f'Destroyed {count} actors')
+"
+```
+
+### Step 2: Verify all actors are gone before next spawn
+
+```bash
+python3 -c "
+import carla
+client = carla.Client('localhost', 2000)
+client.set_timeout(10.0)
+world = client.get_world()
+actors = [a for a in world.get_actors() if a.type_id != 'spectator']
+print(f'Remaining actors: {len(actors)}')
+for a in actors:
+    print(f'  {a.type_id} id={a.id}')
+"
+```
+
+Only proceed to the next run when `Remaining actors: 0`.
+
+### Step 3: Restart the bridge (Terminal 2)
+
+Ctrl+C the bridge, then relaunch:
+
+```bash
+ros2 launch autoware_carla_cpp_bridge aw_carla_cpp_bridge.launch.py
+```
+
+### Step 4: Restart Autoware (Terminal 4)
+
+Ctrl+C Autoware, then relaunch with the same command as before. This clears
+all topic buffers and EKF state, ensuring a clean localization initialization.
+
+---
+
+## Part 5: LiDAR Debugging — NDT Score Below Threshold
+
+If Terminal 4 shows recurring warnings like:
+```
+[autoware_ndt_scan_matcher_node]: Score is below the threshold. Score: 1.2, Threshold: 2.3
+[autoware_ndt_scan_matcher_node]: No InputSource. Please check the input lidar topic
+```
+
+Follow this diagnostic chain to find the break in the LiDAR pipeline:
+
+### Step 1: Verify the full LiDAR topic chain
+
+Check each topic in order — the first one with no data is the break point:
+
+```bash
+# CARLA raw output (should have data ~1Hz when vehicle is spawned)
+ros2 topic hz /carla/ego_vehicle/sensor/lidar/front/point_cloud
+
+# Bridge output (should have data ~5-6Hz)
+ros2 topic hz /sensor/lidar/front
+
+# After crop box filters (should match bridge output)
+ros2 topic hz /sensing/lidar/front/mirror_cropped/pointcloud_ex
+ros2 topic hz /sensing/lidar/front/self_cropped/pointcloud_ex
+
+# Final output to NDT (must have data for localization to work)
+ros2 topic hz /sensing/lidar/front/pointcloud
+ros2 topic hz /sensing/lidar/concatenated/pointcloud
+```
+
+### Step 2: Check for nullptr errors
+
+If Terminal 4 shows:
+```
+transformed_raw_points[/sensing/lidar/front/mirror_cropped/pointcloud_ex] is nullptr
+```
+
+This means stale data from a previous run is interfering. **Restart the bridge
+and Autoware** following the between-run cleanup steps above.
+
+### Step 3: Check if the ego vehicle is actually spawned
+
+The LiDAR topics will be empty until the leaderboard evaluator spawns the ego
+vehicle. Verify the evaluator has printed `> Running the route` before checking
+LiDAR Hz. Topics will only have data after that point.
+
+### Step 4: Check NDT input topic
+
+NDT subscribes to `/localization/util/downsample/pointcloud`. Verify it has data:
+
+```bash
+ros2 topic hz /localization/util/downsample/pointcloud
+```
+
+If this is empty but `/sensing/lidar/concatenated/pointcloud` has data, the
+downsampler node has failed. Restart Autoware.
+
+### Step 5: Root cause — stale data from previous run
+
+The most common cause of NDT score failures is residual LiDAR point clouds
+from a previous run's ego vehicle still being buffered when the new run starts.
+The fix is always a full cleanup and restart between runs as described in Part 4.
+
+---
+
 ## Architecture Overview
 
 ```
-Host Machine
-├── Terminal 1: CARLA 0.9.16 (source build, native DDS via -ros2 flag)
-│   └── Publishes sensor data via FastDDS
+vedant@Minerva (all components on same machine)
+├── Terminal 1: CARLA 0.9.16 (carla_non_source, native DDS via --ros2)
+│   └── Publishes sensor data via FastDDS on localhost
 │
 ├── Terminal 2/3: autoware_carla_leaderboard container (CycloneDDS)
-│   ├── C++ bridge: subscribes FastDDS → republishes as ROS2 CycloneDDS topics
-│   └── Leaderboard evaluator: runs scenarios, spawns ego vehicle
+│   ├── C++ bridge: FastDDS topics → CycloneDDS ROS2 topics
+│   └── Leaderboard evaluator: spawns ego vehicle, runs scenarios
 │
 └── Terminal 4: Autoware 1.7.1 container (CycloneDDS)
-    └── Subscribes to bridge topics, runs planning/control, publishes commands
+    └── Subscribes to bridge topics, runs planning/control
 ```
 
-**Why two DDS implementations?**
-CARLA 0.9.16 native DDS uses FastDDS. Autoware and the bridge use CycloneDDS.
-The C++ bridge (`aw_carla_cpp_bridge`) translates between them. This is why
-`ros2 topic list` on the host does not show CARLA topics directly — topics
-only appear inside the bridge container after the C++ bridge is running.
-
----
-
-## Known Issues and Current Status
-
-### Pointcloud Map Not Loading
-The `pointcloud_map_loader` component is missing from the map container. This
-causes localization to fail since NDT scan matching has no map to match against.
-As a result:
-- No `map` → `base_link` transform is established
-- Autoware cannot determine vehicle position
-- Route planning fails
-- `RouteCompletionTest` reports 0% completion
-
-**Status:** Under investigation. The `pointcloud_map_loader` package needs to be
-verified as built and loading correctly into the map container.
-
-**Workaround:** Use privileged mode (`aw_priviliged.py`) which provides ground truth
-localization from CARLA directly, bypassing NDT scan matching entirely.
-
-### GPU Renderer Crash on Map Switch
-Dynamically switching CARLA maps (e.g., from Town10HD to Town01) causes a
-segmentation fault in `FDistanceFieldVolumeTexture` and the UE4 deferred
-shading renderer. This is a GPU memory issue with the RTX 4080 Laptop (12GB VRAM)
-running UE4Editor mode.
-
-**Workaround:** Always use Town10HD_Opt routes — this is the default CARLA map
-and requires no switching.
-
-**Permanent fix:** Package CARLA (`make package`) to run as a standalone binary
-instead of UE4Editor, which significantly reduces VRAM usage.
-
-### Simulation Speed
-The simulation runs at approximately 4.5% real-time speed (0.045x ratio). This
-is caused by running CARLA in UE4Editor mode simultaneously with Autoware.
-Packaging CARLA would improve this significantly.
-
----
-
-## File Structure After Setup
-
-```
-~/ (home directory)
-├── autoware/                          # Autoware 1.7.1 source + built workspace
-│   └── src/carla_audi_etron/          # Vehicle + sensor kit for CARLA
-├── autoware_carla_leaderboard/        # Bridge repo + built workspace
-│   ├── config/config.yaml             # Scenario configuration
-│   └── carla-0.9.16-cp310-cp310-linux_x86_64.whl  # Source-built CARLA wheel
-├── autoware_map/
-│   └── carla/
-│       ├── Town01/                    # Lanelet2 map assets
-│       ├── Town07/
-│       └── Town10/
-├── autoware_data/                     # ML model artifacts
-│   ├── lidar_centerpoint/
-│   ├── tensorrt_yolox/
-│   ├── traffic_light_classifier/
-│   └── traffic_light_fine_detector/
-└── download_autoware_data.sh          # Script to re-download artifacts if needed
-```
+**Why all components on the same machine?**
+DDS multicast discovery is unreliable over WiFi. Running everything on
+vedant@Minerva eliminates cross-machine DDS issues entirely. All topics
+are discovered via localhost multicast which is always reliable.
 
 ---
 
 ## Container Restart Checklist
 
-Every time a container restarts it resets to its original image. Always run:
-
-**Bridge container (Terminals 2 and 3):**
+**Bridge container (Terminals 2 and 3) — every restart:**
 ```bash
-cd /home/skodas/autoware_carla_leaderboard
+cd /data/vedant/Ubuntu/Swaraj/autoware_carla_leaderboard
 source install/setup.bash
 source carla_envs.sh
 pip3 install carla-0.9.16-cp310-cp310-linux_x86_64.whl --force-reinstall
 ```
 
-**Autoware container (Terminal 4):**
+**Autoware container (Terminal 4) — every restart:**
 ```bash
-ln -s /home/skodas/autoware_data /root/autoware_data 2>/dev/null || true
-source /home/skodas/autoware/install/setup.bash
+ln -s /data/vedant/Ubuntu/Swaraj/autoware_data /root/autoware_data 2>/dev/null || true
+source /data/vedant/Ubuntu/Swaraj/autoware/install/setup.bash
 ```
 
 ---
 
-## Python Dependency Notes
+## Known Issues
 
-During the source build attempt (before switching to Docker), the following Python
-packages were required. These are already pre-installed in the Docker images but
-are noted here for reference:
+### Town01 Map Switch
+Switching from Town10HD_Opt to Town01 triggers shader recompilation in CARLA.
+On hardware with limited VRAM (RTX 4080 Laptop, 12GB) this causes a GPU renderer
+crash. On vedant@Minerva (RTX 5070 Ti, 16GB) this works correctly.
 
-| Package | Version | Purpose |
-|---|---|---|
-| `setuptools` | `==58.2.0` | Legacy `setup.py` / colcon compatibility |
-| `jinja2` | latest | `autoware_system_designer` launch file generation |
-| `typeguard` | latest | Required by `generate-parameter-library-py` |
-| `jsonschema` | latest | Required by system design packages |
+### Simulation Speed
+Game time to system time ratio depends on hardware and synchronous mode tick rate.
+With all components on vedant@Minerva, expect significantly better ratios than
+the 0.036x seen when running across machines over WiFi.
+
+### Traffic Vehicle Spawn Failures
+```
+WARNING: Cannot spawn actor vehicle.* at position Location(x=...) 
+```
+Traffic vehicles sometimes fail to spawn if their spawn point is occupied by the
+ego vehicle. This is a known leaderboard issue and does not affect the evaluation
+of the ego vehicle's behavior.
+
+### pointcloud_map_loader Missing
+If `/map/pointcloud_map` has `Publisher count: 0`, the map loader failed to start.
+The most common cause is the wrong `map_path` — always use `autoware_maps` (with
+an 's'), not `autoware_map`. Verify the path contains `pointcloud_map.pcd` before
+launching Autoware.
+
+---
+
+## File Structure
+
+```
+/data/vedant/Ubuntu/Swaraj/
+├── carla_non_source/              # Pre-built CARLA 0.9.16 binary
+│   └── PythonAPI/carla/dist/      # CARLA Python wheel
+├── autoware_carla_leaderboard/    # Bridge repo + built workspace
+│   ├── config/config.yaml         # Scenario configuration
+│   ├── carla-0.9.16-*.whl         # CARLA wheel (copied from carla_non_source)
+│   └── src/external/leaderboard/  # Patched leaderboard evaluator
+├── autoware/                      # Autoware 1.7.1 source + built workspace
+│   └── src/carla_audi_etron/      # Vehicle + sensor kit
+├── autoware_maps/                 # Map assets (note: with 's')
+│   └── carla/
+│       ├── Town01/
+│       └── Town10/
+└── autoware_data/                 # ML model artifacts
+    ├── lidar_centerpoint/
+    ├── tensorrt_yolox/
+    ├── traffic_light_classifier/
+    └── traffic_light_fine_detector/
+```
