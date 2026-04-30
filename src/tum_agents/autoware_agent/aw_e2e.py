@@ -91,6 +91,11 @@ class AutowareE2EAgent(TUMROSBaseAgent):
         # Camera Publisher
         self._camera_pub = self.ros_node.create_publisher(Image, "/sensing/camera/traffic_light/image_raw", qos_profile=qos_profile_sensor_data)
         self._camera_info_pub = self.ros_node.create_publisher(CameraInfo, "/sensing/camera/traffic_light/camera_info", qos_profile=qos_profile_sensor_data)
+        self._camera_rear_pub = self.ros_node.create_publisher(Image, "/sensing/camera/rear/image_raw", qos_profile=qos_profile_sensor_data)
+        self._camera_left_pub = self.ros_node.create_publisher(Image, "/sensing/camera/left/image_raw", qos_profile=qos_profile_sensor_data)
+        self._camera_right_pub = self.ros_node.create_publisher(Image, "/sensing/camera/right/image_raw", qos_profile=qos_profile_sensor_data)
+
+        
         # Subscriber for Autoware Priviliged
         self._clock_pub = self.ros_node.create_publisher(Clock, "/clock", qos_profile=QoSProfile(depth=1, durability=DurabilityPolicy.VOLATILE))
         # Publisher for Localization
@@ -165,7 +170,7 @@ class AutowareE2EAgent(TUMROSBaseAgent):
         # V2X sens gt traffic light states
         # Either the camera image or the v2x need to be set true
         # For visualisation you can also set both to true 
-        self._use_v2x_traffic_light = False 
+        self._use_v2x_traffic_light = True # was false - sous_chef  
         self._publish_cam_image = True 
         self._traffic_light_ids = set()  
 
@@ -189,15 +194,31 @@ class AutowareE2EAgent(TUMROSBaseAgent):
         ]
 
         if self._publish_cam_image:
-            sensors.append({ "type": "sensor.camera.rgb", "id": "CAMERA_front",
-            "x": 0.0, "y": 0.0, "z": 2.0, 
-            "roll": 0.0, "pitch": 0.0, "yaw": 0.0, "width": 800 , "height": 400,
-            "fov": 90.0,
-            'ros_name': 'sensor/camera'})
+            sensors.append({"type": "sensor.camera.rgb", "id": "CAMERA_front",
+                "x": 0.0, "y": 0.0, "z": 2.0,
+                "roll": 0.0, "pitch": 0.0, "yaw": 0.0,
+                "width": 800, "height": 400, "fov": 90.0,
+                "ros_name": "sensor/camera/front"})
+            sensors.append({"type": "sensor.camera.rgb", "id": "CAMERA_rear",
+                "x": -2.0, "y": 0.0, "z": 2.0,
+                "roll": 0.0, "pitch": 0.0, "yaw": 180.0,
+                "width": 800, "height": 400, "fov": 90.0,
+                "ros_name": "sensor/camera/rear"})
+            sensors.append({"type": "sensor.camera.rgb", "id": "CAMERA_left",
+                "x": 0.0, "y": 1.0, "z": 2.0,
+                "roll": 0.0, "pitch": 0.0, "yaw": 90.0,
+                "width": 800, "height": 400, "fov": 90.0,
+                "ros_name": "sensor/camera/left"})
+            sensors.append({"type": "sensor.camera.rgb", "id": "CAMERA_right",
+                "x": 0.0, "y": -1.0, "z": 2.0,
+                "roll": 0.0, "pitch": 0.0, "yaw": -90.0,
+                "width": 800, "height": 400, "fov": 90.0,
+                "ros_name": "sensor/camera/right"})
 
-            self._camera_height = next(s for s in sensors if s["type"] == "sensor.camera.rgb")["height"]
-            self._camera_width = next(s for s in sensors if s["type"] == "sensor.camera.rgb")["width"]
-            self._camera_fov = next(s for s in sensors if s["type"] == "sensor.camera.rgb")["fov"]
+            front_cam = next(s for s in sensors if s["id"] == "CAMERA_front")
+            self._camera_height = front_cam["height"]
+            self._camera_width = front_cam["width"]
+            self._camera_fov = front_cam["fov"]
 
         return sensors
 
@@ -267,6 +288,12 @@ class AutowareE2EAgent(TUMROSBaseAgent):
         )
         imu_msg.linear_acceleration = Vector3(**loc_acc["position"])
         self._imu_pub.publish(imu_msg)
+
+        # Publish ground truth objects from CARLA for obstacle avoidance
+        # objects_msg = self._awp_converter.get_predicted_objects_msg()
+        objects_msg = self._awp_converter.create_predicted_object_message()
+        objects_msg.header.stamp = aw_time
+        self._object_publisher.publish(objects_msg)
         
         if self._use_v2x_traffic_light:
             # We set all autoware traffic lights to the state of the currently affecting traffic light
